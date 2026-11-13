@@ -41,3 +41,109 @@ button:disabled{opacity:.5;cursor:not-allowed}
 <label id="agree" hidden style="display:flex;gap:8px;align-items:flex-start"><input id="ag" type="checkbox" style="width:auto;margin-top:4px">I am 18 or older and will use PAIRLY for friendly, non-sexual activities only.</label>
 <button id="go">Log in</button>
 </form>
+<div class="msg" id="m" role="status"></div>
+</section>
+
+<section id="me" hidden>
+<h2 id="hi"></h2>
+<p><span class="pill" id="vs"></span> <span class="pill" id="rolePill"></span></p>
+<form id="pf"><label for="en">Display name</label><input id="en"><label for="ec">City</label><input id="ec"><button>Save changes</button></form>
+<button class="g" disabled title="Identity verification needs a provider; awaiting configuration">ID verification: awaiting configuration</button>
+<div id="cd" hidden>
+<h2>Companion profile</h2>
+<form id="cf"><label for="bio">Short bio</label><textarea id="bio" rows="3" maxlength="400"></textarea>
+<label for="ints">Interests (comma separated)</label><input id="ints" placeholder="coffee, books, travel">
+<label for="langs">Languages (comma separated)</label><input id="langs" placeholder="Bangla, English">
+<label class="chk"><input type="checkbox" id="pub">Publish my profile (shown to others only after ID verification)</label>
+<button>Save companion profile</button></form>
+<h2>My packages</h2><ul class="l" id="pkl"></ul>
+<form id="pk"><label for="pt">Package name</label><input id="pt" placeholder="2-hour coffee meetup" required>
+<label for="ph">Duration (hours)</label><input id="ph" type="number" min="0.5" step="0.5" required>
+<label for="pp">Price (BDT)</label><input id="pp" type="number" min="0" required>
+<label for="pa">Included activities</label><input id="pa" placeholder="Coffee, walk, conversation">
+<label for="pc">Booking conditions</label><input id="pc" placeholder="Public places only, 24h notice">
+<button>Add package</button></form>
+<h2>My availability</h2><ul class="l" id="avl"></ul>
+<form id="af"><label for="ad">Date</label><input id="ad" type="date" required>
+<label for="as">From</label><input id="as" type="time" required><label for="ae">To</label><input id="ae" type="time" required>
+<button>Add time slot</button></form>
+<div class="msg" id="m3" role="status"></div></div>
+<h2>Companions</h2><div id="brl"></div>
+<button class="g" id="out" type="button">Log out</button>
+<div class="msg" id="m2" role="status"></div>
+</section>
+<p class="tiny">Phase 3 · Profiles, packages and availability. Bookings, messaging and payments come in later phases.</p>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+var sb=supabase.createClient("https://ebcmzhzntqukaodmqoon.supabase.co","sb_publishable_tcL4iJWoqkVGmmhgBUCl6Q_g2oUiuqg");
+var $=function(i){return document.getElementById(i)},mode="in";
+function say(el,t,ok){el.textContent=t;el.className="msg "+(ok?"ok":"err")}
+function setMode(m){mode=m;var up=m==="up";$("upOnly").hidden=!up;$("agree").hidden=!up;$("go").textContent=up?"Create account":"Log in";$("pw").autocomplete=up?"new-password":"current-password";$("m").textContent=""}
+$("tIn").onclick=function(){setMode("in")};$("tUp").onclick=function(){setMode("up")};
+function age(d){var b=new Date(d),n=new Date(),a=n.getFullYear()-b.getFullYear(),m=n.getMonth()-b.getMonth();if(m<0||(m===0&&n.getDate()<b.getDate()))a--;return a}
+$("f").onsubmit=async function(e){e.preventDefault();var b=$("go");b.disabled=true;
+ try{
+  if(mode==="up"){
+   if(!$("nm").value.trim())return say($("m"),"Enter a display name.");
+   if(!$("dob").value||age($("dob").value)<18)return say($("m"),"You must be 18 or older to join PAIRLY.");
+   if(!$("ag").checked)return say($("m"),"Please confirm the 18+ and friendly-only statement.");
+   var r=await sb.auth.signUp({email:$("em").value,password:$("pw").value,options:{data:{display_name:$("nm").value.trim(),date_of_birth:$("dob").value,city:$("ct").value,role:$("rl").value}}});
+   if(r.error)return say($("m"),r.error.message);
+   if(!r.data.session)return say($("m"),"Account created. Check your email to confirm, then log in.",true);
+  }else{
+   var r2=await sb.auth.signInWithPassword({email:$("em").value,password:$("pw").value});
+   if(r2.error)return say($("m"),r2.error.message);
+  }
+  load();
+ }catch(x){say($("m"),"Could not reach the server. Check your connection.")}finally{b.disabled=false}
+};
+async function load(){
+ var u=(await sb.auth.getUser()).data.user;
+ if(!u){$("auth").hidden=false;$("me").hidden=true;return}
+ var r=await sb.from("profiles").select("display_name,city,role,verification_status").eq("id",u.id).single();
+ $("auth").hidden=true;$("me").hidden=false;
+ if(r.error){say($("m2"),"Profile not found. Ask support to check your account.");return}
+ var p=r.data;$("hi").textContent="Hi, "+p.display_name;$("vs").textContent="ID: "+p.verification_status;$("rolePill").textContent=p.role;
+ $("en").value=p.display_name;$("ec").value=p.city||"";uid=u.id;$("cd").hidden=p.role!=="companion";if(p.role==="companion")loadCd();loadBr();
+}
+$("pf").onsubmit=async function(e){e.preventDefault();var u=(await sb.auth.getUser()).data.user;
+ var r=await sb.from("profiles").update({display_name:$("en").value.trim(),city:$("ec").value.trim()}).eq("id",u.id);
+ if(r.error)say($("m2"),r.error.message);else{say($("m2"),"Saved.",true);$("hi").textContent="Hi, "+$("en").value.trim()}};
+
+var uid=null;
+function el(t,x,c){var e=document.createElement(t);if(x!=null)e.textContent=x;if(c)e.className=c;return e}
+function csv(s){return s.split(",").map(function(x){return x.trim()}).filter(Boolean)}
+function rm(label,fn){var b=el("button","Remove","g sm");b.type="button";b.onclick=fn;return b}
+async function loadCd(){
+ var r=await sb.from("companion_profiles").select("*").eq("user_id",uid).maybeSingle(),c=r.data||{};
+ $("bio").value=c.bio||"";$("ints").value=(c.interests||[]).join(", ");$("langs").value=(c.languages||[]).join(", ");$("pub").checked=!!c.is_published;
+ var pk=await sb.from("packages").select("*").eq("companion_id",uid).order("created_at"),L=$("pkl");L.innerHTML="";
+ (pk.data||[]).forEach(function(p){var li=el("li",p.title+" · "+p.duration_hours+"h · ৳"+p.price_bdt);li.appendChild(rm("",async function(){await sb.from("packages").delete().eq("id",p.id);loadCd()}));L.appendChild(li)});
+ if(!(pk.data||[]).length)L.appendChild(el("li","No packages yet."));
+ var av=await sb.from("availability").select("*").eq("companion_id",uid).order("day_date"),A=$("avl");A.innerHTML="";
+ (av.data||[]).forEach(function(a){var li=el("li",a.day_date+" · "+a.start_time.slice(0,5)+"–"+a.end_time.slice(0,5));li.appendChild(rm("",async function(){await sb.from("availability").delete().eq("id",a.id);loadCd()}));A.appendChild(li)});
+ if(!(av.data||[]).length)A.appendChild(el("li","No time slots yet."));
+}
+async function loadBr(){
+ var r=await sb.from("companion_profiles").select("user_id,bio,interests,languages,profiles(display_name,city)").eq("is_published",true),B=$("brl"),rows=r.data||[];B.innerHTML="";
+ if(!rows.length){B.appendChild(el("p","No verified companions yet."));return}
+ var pk=await sb.from("packages").select("*").in("companion_id",rows.map(function(x){return x.user_id})).eq("active",true);
+ rows.forEach(function(c){var d=el("div",null,"card2"),pr=c.profiles||{};
+  d.appendChild(el("h3",(pr.display_name||"Companion")+(pr.city?" · "+pr.city:"")));d.appendChild(el("p",c.bio||""));
+  d.appendChild(el("p",(c.interests||[]).join(", ")+(c.languages&&c.languages.length?" | "+c.languages.join(", "):"")));
+  (pk.data||[]).filter(function(p){return p.companion_id===c.user_id}).forEach(function(p){d.appendChild(el("p","• "+p.title+" – "+p.duration_hours+"h – ৳"+p.price_bdt))});B.appendChild(d)});
+}
+$("cf").onsubmit=async function(e){e.preventDefault();
+ var r=await sb.from("companion_profiles").upsert({user_id:uid,bio:$("bio").value.trim(),interests:csv($("ints").value),languages:csv($("langs").value),is_published:$("pub").checked,updated_at:new Date().toISOString()});
+ if(r.error)say($("m3"),r.error.message);else{say($("m3"),"Saved.",true);loadBr()}};
+$("pk").onsubmit=async function(e){e.preventDefault();
+ var r=await sb.from("packages").insert({companion_id:uid,title:$("pt").value.trim(),duration_hours:+$("ph").value,price_bdt:+$("pp").value,activities:$("pa").value.trim(),conditions:$("pc").value.trim()});
+ if(r.error)say($("m3"),r.error.message);else{$("pk").reset();say($("m3"),"Package added.",true);loadCd();loadBr()}};
+$("af").onsubmit=async function(e){e.preventDefault();
+ var r=await sb.from("availability").insert({companion_id:uid,day_date:$("ad").value,start_time:$("as").value,end_time:$("ae").value});
+ if(r.error)say($("m3"),r.error.message.indexOf("check")>-1?"End time must be after start time.":r.error.message);else{$("af").reset();say($("m3"),"Time slot added.",true);loadCd()}};
+$("out").onclick=async function(){await sb.auth.signOut();load()};
+setMode("in");load();
+</script></body></html>
