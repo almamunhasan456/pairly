@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PAIRLY – Sign in</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Sora:wght@500;700&display=swap">
+<style>
+:root{color-scheme:dark;--bg:#07060f;--tx:#ece9f8;--mut:rgba(236,233,248,.65);--line:rgba(255,255,255,.14)}
+*{box-sizing:border-box}
+body{margin:0;min-height:100svh;background:radial-gradient(900px 500px at 80% -10%,rgba(139,92,246,.35),transparent),radial-gradient(700px 500px at 0% 100%,rgba(236,72,153,.25),transparent),var(--bg);color:var(--tx);font:16px/1.5 "DM Sans",system-ui,sans-serif;display:grid;place-items:center;padding:20px}
+.box{width:100%;max-width:420px;background:rgba(255,255,255,.06);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--line);border-radius:22px;padding:24px}
+h1{font:700 28px Sora,sans-serif;margin:0 0 4px;background:linear-gradient(110deg,#a78bfa,#f472b6 55%,#7dd3fc);-webkit-background-clip:text;background-clip:text;color:transparent}
+h2{font:700 20px Sora,sans-serif;margin:18px 0 10px}
+p{margin:0 0 12px;color:var(--mut);font-size:14px}
+label{display:block;font-size:13px;margin:12px 0 4px}
+input,select{width:100%;background:rgba(255,255,255,.09);border:1px solid var(--line);border-radius:12px;padding:12px;color:var(--tx);font:inherit}
+select option{color:#000}
+button{width:100%;margin-top:16px;border:0;border-radius:12px;padding:13px;color:#fff;font:500 16px "DM Sans",sans-serif;cursor:pointer;background:linear-gradient(110deg,#8b5cf6,#ec4899 55%,#38bdf8)}
+button.g{background:rgba(255,255,255,.1);color:var(--mut)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.tabs{display:flex;gap:8px;margin:14px 0 4px}.tabs button{margin:0;padding:10px}
+.msg{margin-top:12px;font-size:14px;min-height:20px}.err{color:#fda4af}.ok{color:#86efac}
+.pill{display:inline-block;padding:3px 10px;border-radius:99px;background:rgba(56,189,248,.18);color:#7dd3fc;font-size:12px}
+.tiny{font-size:12px;color:var(--mut);margin-top:14px}
+[hidden]{display:none!important}
+:focus-visible{outline:2px solid #38bdf8;outline-offset:3px}
+</style></head><body>
+<main class="box">
+<h1>PAIRLY</h1><p>Platonic companionship for verified adults. 18+ only.</p>
+
+<section id="auth">
+<div class="tabs"><button class="g" id="tIn" type="button">Log in</button><button class="g" id="tUp" type="button">Sign up</button></div>
+<form id="f">
+<div id="upOnly" hidden>
+<label for="nm">Display name</label><input id="nm" autocomplete="nickname">
+<label for="dob">Date of birth (must be 18+)</label><input id="dob" type="date">
+<label for="ct">City</label><select id="ct"><option>Dhaka</option><option>Chattogram</option><option>Sylhet</option><option>Gazipur</option><option>Other</option></select>
+<label for="rl">I want to</label><select id="rl"><option value="customer">Book companions</option><option value="companion">Offer my time as a companion</option></select>
+</div>
+<label for="em">Email</label><input id="em" type="email" autocomplete="email" required>
+<label for="pw">Password (8+ characters)</label><input id="pw" type="password" minlength="8" autocomplete="current-password" required>
+<label id="agree" hidden style="display:flex;gap:8px;align-items:flex-start"><input id="ag" type="checkbox" style="width:auto;margin-top:4px">I am 18 or older and will use PAIRLY for friendly, non-sexual activities only.</label>
+<button id="go">Log in</button>
+</form>
+<div class="msg" id="m" role="status"></div>
+</section>
+
+<section id="me" hidden>
+<h2 id="hi"></h2>
+<p><span class="pill" id="vs"></span> <span class="pill" id="rolePill"></span></p>
+<form id="pf"><label for="en">Display name</label><input id="en"><label for="ec">City</label><input id="ec"><button>Save changes</button></form>
+<button class="g" disabled title="Identity verification needs a provider; awaiting configuration">ID verification: awaiting configuration</button>
+<button class="g" id="out" type="button">Log out</button>
+<div class="msg" id="m2" role="status"></div>
+</section>
+<p class="tiny">Phase 2 · Sign-up, login and 18+ check. Bookings, messaging and payments come in later phases.</p>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+var sb=supabase.createClient("https://ebcmzhzntqukaodmqoon.supabase.co","sb_publishable_tcL4iJWoqkVGmmhgBUCl6Q_g2oUiuqg");
+var $=function(i){return document.getElementById(i)},mode="in";
+function say(el,t,ok){el.textContent=t;el.className="msg "+(ok?"ok":"err")}
+function setMode(m){mode=m;var up=m==="up";$("upOnly").hidden=!up;$("agree").hidden=!up;$("go").textContent=up?"Create account":"Log in";$("pw").autocomplete=up?"new-password":"current-password";$("m").textContent=""}
+$("tIn").onclick=function(){setMode("in")};$("tUp").onclick=function(){setMode("up")};
+function age(d){var b=new Date(d),n=new Date(),a=n.getFullYear()-b.getFullYear(),m=n.getMonth()-b.getMonth();if(m<0||(m===0&&n.getDate()<b.getDate()))a--;return a}
+$("f").onsubmit=async function(e){e.preventDefault();var b=$("go");b.disabled=true;
+ try{
+  if(mode==="up"){
+   if(!$("nm").value.trim())return say($("m"),"Enter a display name.");
+   if(!$("dob").value||age($("dob").value)<18)return say($("m"),"You must be 18 or older to join PAIRLY.");
+   if(!$("ag").checked)return say($("m"),"Please confirm the 18+ and friendly-only statement.");
+   var r=await sb.auth.signUp({email:$("em").value,password:$("pw").value,options:{data:{display_name:$("nm").value.trim(),date_of_birth:$("dob").value,city:$("ct").value,role:$("rl").value}}});
+   if(r.error)return say($("m"),r.error.message);
+   if(!r.data.session)return say($("m"),"Account created. Check your email to confirm, then log in.",true);
+  }else{
+   var r2=await sb.auth.signInWithPassword({email:$("em").value,password:$("pw").value});
+   if(r2.error)return say($("m"),r2.error.message);
+  }
+  load();
+ }catch(x){say($("m"),"Could not reach the server. Check your connection.")}finally{b.disabled=false}
+};
+async function load(){
+ var u=(await sb.auth.getUser()).data.user;
+ if(!u){$("auth").hidden=false;$("me").hidden=true;return}
+ var r=await sb.from("profiles").select("display_name,city,role,verification_status").eq("id",u.id).single();
+ $("auth").hidden=true;$("me").hidden=false;
+ if(r.error){say($("m2"),"Profile not found. Ask support to check your account.");return}
+ var p=r.data;$("hi").textContent="Hi, "+p.display_name;$("vs").textContent="ID: "+p.verification_status;$("rolePill").textContent=p.role;
+ $("en").value=p.display_name;$("ec").value=p.city||"";
+}
+$("pf").onsubmit=async function(e){e.preventDefault();var u=(await sb.auth.getUser()).data.user;
+ var r=await sb.from("profiles").update({display_name:$("en").value.trim(),city:$("ec").value.trim()}).eq("id",u.id);
+ if(r.error)say($("m2"),r.error.message);else{say($("m2"),"Saved.",true);$("hi").textContent="Hi, "+$("en").value.trim()}};
+$("out").onclick=async function(){await sb.auth.signOut();load()};
+setMode("in");load();
+</script></body></html>
