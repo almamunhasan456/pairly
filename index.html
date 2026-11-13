@@ -69,10 +69,18 @@ button:disabled{opacity:.5;cursor:not-allowed}
 <button>Add time slot</button></form>
 <div class="msg" id="m3" role="status"></div></div>
 <h2>Companions</h2><div id="brl"></div>
+<form id="rq" hidden><h2 id="rqt">Request booking</h2><label for="rd">Date</label><input id="rd" type="date" required><label for="rt">Start time</label><input id="rt" type="time" required><label for="rn">Note (optional, no phone numbers)</label><input id="rn" maxlength="200"><button>Send request</button><button class="g" type="button" id="rqx">Cancel</button></form>
+<h2>My bookings</h2><div id="bkl"></div>
+<form id="rvf" hidden><h2>Leave a review</h2><label for="rs">Rating</label><select id="rs"><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select><label for="rc">Comment</label><input id="rc" maxlength="300"><button>Submit review</button></form>
+<div id="chat" hidden><h2 id="ct2"></h2><ul class="l" id="msgs"></ul>
+<form id="mf"><input id="mi" maxlength="1000" placeholder="Write a message. Never share phone numbers." required><button>Send</button></form>
+<button class="g sm" type="button" id="rfr">Refresh</button> <button class="g sm" type="button" id="blk">Block this person</button>
+<label for="rr">Report a problem</label><input id="rr" maxlength="300" placeholder="What happened?"><button class="g sm" type="button" id="rpt">Send report</button></div>
+<div class="msg" id="m4" role="status"></div>
 <button class="g" id="out" type="button">Log out</button>
 <div class="msg" id="m2" role="status"></div>
 </section>
-<p class="tiny">Phase 3 · Profiles, packages and availability. Bookings, messaging and payments come in later phases.</p>
+<p class="tiny">Phase 4 · Bookings, chat, reviews, block and report. Payments and admin tools come next.</p>
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
@@ -106,7 +114,7 @@ async function load(){
  $("auth").hidden=true;$("me").hidden=false;
  if(r.error){say($("m2"),"Profile not found. Ask support to check your account.");return}
  var p=r.data;$("hi").textContent="Hi, "+p.display_name;$("vs").textContent="ID: "+p.verification_status;$("rolePill").textContent=p.role;
- $("en").value=p.display_name;$("ec").value=p.city||"";uid=u.id;$("cd").hidden=p.role!=="companion";if(p.role==="companion")loadCd();loadBr();
+ $("en").value=p.display_name;$("ec").value=p.city||"";uid=u.id;$("cd").hidden=p.role!=="companion";myRole=p.role;if(p.role==="companion")loadCd();loadBr();loadBk();
 }
 $("pf").onsubmit=async function(e){e.preventDefault();var u=(await sb.auth.getUser()).data.user;
  var r=await sb.from("profiles").update({display_name:$("en").value.trim(),city:$("ec").value.trim()}).eq("id",u.id);
@@ -129,11 +137,12 @@ async function loadCd(){
 async function loadBr(){
  var r=await sb.from("companion_profiles").select("user_id,bio,interests,languages,profiles(display_name,city)").eq("is_published",true),B=$("brl"),rows=r.data||[];B.innerHTML="";
  if(!rows.length){B.appendChild(el("p","No verified companions yet."));return}
- var pk=await sb.from("packages").select("*").in("companion_id",rows.map(function(x){return x.user_id})).eq("active",true);
+ var pk=await sb.from("packages").select("*").in("companion_id",rows.map(function(x){return x.user_id})).eq("active",true),rv=await sb.from("reviews").select("companion_id,rating").in("companion_id",rows.map(function(x){return x.user_id}));
  rows.forEach(function(c){var d=el("div",null,"card2"),pr=c.profiles||{};
   d.appendChild(el("h3",(pr.display_name||"Companion")+(pr.city?" · "+pr.city:"")));d.appendChild(el("p",c.bio||""));
   d.appendChild(el("p",(c.interests||[]).join(", ")+(c.languages&&c.languages.length?" | "+c.languages.join(", "):"")));
-  (pk.data||[]).filter(function(p){return p.companion_id===c.user_id}).forEach(function(p){d.appendChild(el("p","• "+p.title+" – "+p.duration_hours+"h – ৳"+p.price_bdt))});B.appendChild(d)});
+  (pk.data||[]).filter(function(p){return p.companion_id===c.user_id}).forEach(function(p){d.appendChild(el("p","• "+p.title+" – "+p.duration_hours+"h – ৳"+p.price_bdt));if(c.user_id!==uid){var q=el("button","Request this package","x sm");q.type="button";q.onclick=function(){reqPk={c:c.user_id,p:p.id};$("rqt").textContent="Request: "+p.title;$("rq").hidden=false;$("rq").scrollIntoView()};d.appendChild(q)}});
+  var rr=(rv.data||[]).filter(function(x){return x.companion_id===c.user_id});if(rr.length)d.appendChild(el("p","★ "+(rr.reduce(function(a,x){return a+x.rating},0)/rr.length).toFixed(1)+" ("+rr.length+" reviews)"));B.appendChild(d)});
 }
 $("cf").onsubmit=async function(e){e.preventDefault();
  var r=await sb.from("companion_profiles").upsert({user_id:uid,bio:$("bio").value.trim(),interests:csv($("ints").value),languages:csv($("langs").value),is_published:$("pub").checked,updated_at:new Date().toISOString()});
@@ -144,6 +153,44 @@ $("pk").onsubmit=async function(e){e.preventDefault();
 $("af").onsubmit=async function(e){e.preventDefault();
  var r=await sb.from("availability").insert({companion_id:uid,day_date:$("ad").value,start_time:$("as").value,end_time:$("ae").value});
  if(r.error)say($("m3"),r.error.message.indexOf("check")>-1?"End time must be after start time.":r.error.message);else{$("af").reset();say($("m3"),"Time slot added.",true);loadCd()}};
+
+var myRole="",curB=null,reqPk=null,curRv=null;
+async function names(ids){var r=await sb.from("profiles").select("id,display_name").in("id",ids),m={};(r.data||[]).forEach(function(x){m[x.id]=x.display_name});return m}
+async function loadBk(){
+ var r=await sb.from("bookings").select("*,packages(title,price_bdt,duration_hours)").order("created_at",{ascending:false}),L=$("bkl"),rows=r.data||[];L.innerHTML="";
+ if(!rows.length){L.appendChild(el("p","No bookings yet."));return}
+ var ids=[];rows.forEach(function(b){ids.push(b.customer_id,b.companion_id)});var nm=await names(ids);
+ var rv=await sb.from("reviews").select("booking_id").eq("reviewer_id",uid),done={};(rv.data||[]).forEach(function(x){done[x.booking_id]=1});
+ rows.forEach(function(b){var mineC=b.customer_id===uid,other=mineC?b.companion_id:b.customer_id,d=el("div",null,"card2"),pk=b.packages||{};
+  d.appendChild(el("h3",(pk.title||"Booking")+" · "+b.status));
+  d.appendChild(el("p",(mineC?"With ":"From ")+(nm[other]||"member")+" · "+b.slot_date+" "+b.start_time.slice(0,5)+" · ৳"+(pk.price_bdt||0)));
+  if(b.note)d.appendChild(el("p","Note: "+b.note));
+  function btn(t,fn,c){var x=el("button",t,(c||"g")+" sm");x.type="button";x.onclick=fn;d.appendChild(x)}
+  if(!mineC&&b.status==="requested"){btn("Accept",function(){setSt(b.id,"accepted")},"x");btn("Decline",function(){setSt(b.id,"declined")})}
+  if(!mineC&&b.status==="accepted")btn("Mark completed",function(){setSt(b.id,"completed")},"x");
+  if(mineC&&(b.status==="requested"||b.status==="accepted"))btn("Cancel booking",function(){setSt(b.id,"cancelled")});
+  if(b.status!=="declined"&&b.status!=="cancelled")btn("Chat",function(){openChat(b,other,nm[other])});
+  if(mineC&&b.status==="completed"&&!done[b.id])btn("Leave review",function(){curRv=b;$("rvf").hidden=false;$("rvf").scrollIntoView()});
+  L.appendChild(d)});
+}
+async function setSt(id,st){var r=await sb.from("bookings").update({status:st}).eq("id",id);if(r.error)say($("m4"),r.error.message);else{say($("m4"),"Booking "+st+".",true);loadBk()}}
+$("rqx").onclick=function(){$("rq").hidden=true};
+$("rq").onsubmit=async function(e){e.preventDefault();
+ var r=await sb.from("bookings").insert({customer_id:uid,companion_id:reqPk.c,package_id:reqPk.p,slot_date:$("rd").value,start_time:$("rt").value,note:$("rn").value.trim()});
+ if(r.error)say($("m4"),r.error.message);else{$("rq").reset();$("rq").hidden=true;say($("m4"),"Request sent. The companion will accept or decline.",true);loadBk()}};
+$("rvf").onsubmit=async function(e){e.preventDefault();
+ var r=await sb.from("reviews").insert({booking_id:curRv.id,reviewer_id:uid,companion_id:curRv.companion_id,rating:+$("rs").value,comment:$("rc").value.trim()});
+ if(r.error)say($("m4"),r.error.message);else{$("rvf").reset();$("rvf").hidden=true;say($("m4"),"Review submitted.",true);loadBk();loadBr()}};
+function openChat(b,other,name){curB={id:b.id,other:other};$("chat").hidden=false;$("ct2").textContent="Chat with "+(name||"member");loadMsgs();$("chat").scrollIntoView()}
+async function loadMsgs(){var r=await sb.from("messages").select("*").eq("booking_id",curB.id).order("created_at"),L=$("msgs");L.innerHTML="";
+ (r.data||[]).forEach(function(m){L.appendChild(el("li",(m.sender_id===uid?"Me: ":"Them: ")+m.body))});if(!(r.data||[]).length)L.appendChild(el("li","No messages yet."))}
+$("mf").onsubmit=async function(e){e.preventDefault();var r=await sb.from("messages").insert({booking_id:curB.id,sender_id:uid,body:$("mi").value.trim()});
+ if(r.error)say($("m4"),r.error.message);else{$("mi").value="";loadMsgs()}};
+$("rfr").onclick=function(){loadMsgs()};
+$("blk").onclick=async function(){var r=await sb.from("blocks").upsert({blocker_id:uid,blocked_id:curB.other});say($("m4"),r.error?r.error.message:"Blocked. They can no longer message you.",!r.error)};
+$("rpt").onclick=async function(){if(!$("rr").value.trim())return say($("m4"),"Describe the problem first.");
+ var r=await sb.from("reports").insert({reporter_id:uid,reported_id:curB.other,booking_id:curB.id,reason:$("rr").value.trim()});
+ if(r.error)say($("m4"),r.error.message);else{$("rr").value="";say($("m4"),"Report sent to our moderators.",true)}};
 $("out").onclick=async function(){await sb.auth.signOut();load()};
 setMode("in");load();
 </script></body></html>
