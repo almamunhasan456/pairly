@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PAIRLY – Admin</title>
+<style>
+:root{color-scheme:dark;--tx:#ece9f8;--mut:rgba(236,233,248,.65);--line:rgba(255,255,255,.14)}
+*{box-sizing:border-box}body{margin:0;background:#07060f;color:var(--tx);font:15px/1.5 system-ui,sans-serif;padding:16px}
+.w{max-width:720px;margin:0 auto}h1{font-size:24px;margin:0 0 6px}h2{font-size:18px;margin:26px 0 8px}
+.c{border:1px solid var(--line);border-radius:14px;padding:12px;margin:8px 0;background:rgba(255,255,255,.05)}.c p{margin:0 0 6px}
+button{border:0;border-radius:10px;padding:8px 14px;margin:4px 6px 0 0;color:#fff;background:linear-gradient(110deg,#8b5cf6,#ec4899);font:inherit;cursor:pointer}
+button.g{background:rgba(255,255,255,.12)}a{color:#7dd3fc}.m{color:var(--mut);font-size:13px}.e{color:#fda4af}
+.s{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}.s div{border:1px solid var(--line);border-radius:12px;padding:10px}.s b{display:block;font-size:22px}
+</style></head><body><div class="w">
+<h1>PAIRLY Admin</h1><p class="m"><a href="./">Back to site</a> · <span id="who"></span></p><div id="msg" class="e"></div><div id="app" hidden>
+<h2>Overview</h2><div class="s" id="st"></div>
+<h2>ID verification requests</h2><div id="vr"></div>
+<h2>Payments to confirm</h2><div id="pm"></div>
+<h2>Disputes</h2><div id="dp"></div>
+<h2>Reports</h2><div id="rp"></div>
+<h2>Members</h2><div id="us"></div></div></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+var sb=supabase.createClient("https://ebcmzhzntqukaodmqoon.supabase.co","sb_publishable_tcL4iJWoqkVGmmhgBUCl6Q_g2oUiuqg"),$=function(i){return document.getElementById(i)};
+function el(t,x,c){var e=document.createElement(t);if(x!=null)e.textContent=x;if(c)e.className=c;return e}
+function card(box,lines,btns){var d=el("div",null,"c");lines.forEach(function(l){d.appendChild(typeof l==="string"?el("p",l):l)});(btns||[]).forEach(function(b){var x=el("button",b[0],b[2]||"");x.onclick=async function(){x.disabled=true;var r=await b[1]();if(r&&r.error)$("msg").textContent=r.error.message;else go()};d.appendChild(x)});box.appendChild(d)}
+function empty(box,t){box.appendChild(el("p",t,"m"))}
+async function go(){
+ $("msg").textContent="";
+ var u=(await sb.auth.getUser()).data.user;if(!u){$("msg").textContent="Please log in on the main site first, then reopen this page.";return}
+ var me=await sb.from("profiles").select("role,display_name").eq("id",u.id).single();
+ if(!me.data||me.data.role!=="admin"){$("msg").textContent="Admins only.";return}
+ $("who").textContent=me.data.display_name;$("app").hidden=false;
+ var st=await sb.rpc("admin_stats"),S=$("st");S.innerHTML="";
+ if(st.data)Object.keys(st.data).forEach(function(k){var d=el("div");d.appendChild(el("b",st.data[k]));d.appendChild(el("span",k.replace(/_/g," "),"m"));S.appendChild(d)});
+ var users=(await sb.from("profiles").select("*").order("created_at",{ascending:false}).limit(100)).data||[],nm={};users.forEach(function(x){nm[x.id]=x.display_name+" ("+x.role+")"});
+ var vr=$("vr");vr.innerHTML="";var pend=users.filter(function(x){return x.verification_status==="pending"});
+ if(!pend.length)empty(vr,"No pending requests.");
+ for(var i=0;i<pend.length;i++){(function(p){var link=el("p","Loading ID…");
+  sb.storage.from("id-docs").createSignedUrl(p.id+"/id",600).then(function(s){if(s.data){var a=el("a","Open ID photo (link expires in 10 min)");a.href=s.data.signedUrl;a.target="_blank";a.rel="noopener";link.textContent="";link.appendChild(a)}else link.textContent="No ID file found."});
+  card(vr,[p.display_name+" · "+p.role+" · born "+p.date_of_birth+" · "+(p.city||""),link],[["Approve",function(){return sb.rpc("admin_set_verification",{uid:p.id,st:"verified"})}],["Reject",function(){return sb.rpc("admin_set_verification",{uid:p.id,st:"rejected"})},"g"]])})(pend[i])}
+ var pm=(await sb.from("payments").select("*").eq("status","submitted")).data||[],P=$("pm");P.innerHTML="";if(!pm.length)empty(P,"Nothing to confirm.");
+ pm.forEach(function(p){card(P,["৳"+p.amount_bdt+" via "+p.method+" · trx "+p.trx_id,"From "+(nm[p.payer_id]||"member")],[["Confirm",function(){return sb.rpc("admin_set_payment",{pid:p.id,st:"confirmed"})}],["Reject",function(){return sb.rpc("admin_set_payment",{pid:p.id,st:"rejected"})},"g"]])});
+ var dp=(await sb.from("disputes").select("*").eq("status","open")).data||[],D=$("dp");D.innerHTML="";if(!dp.length)empty(D,"No open disputes.");
+ dp.forEach(function(d){card(D,["Opened by "+(nm[d.opened_by]||"member"),d.reason],[["Resolve",function(){return sb.rpc("admin_resolve_dispute",{did:d.id,st:"resolved",note:"Resolved by admin"})}],["Dismiss",function(){return sb.rpc("admin_resolve_dispute",{did:d.id,st:"dismissed",note:"Dismissed by admin"})},"g"]])});
+ var rp=(await sb.from("reports").select("*").order("created_at",{ascending:false}).limit(30)).data||[],R=$("rp");R.innerHTML="";if(!rp.length)empty(R,"No reports.");
+ rp.forEach(function(r){var tgt=users.filter(function(x){return x.id===r.reported_id})[0];card(R,[(nm[r.reporter_id]||"member")+" reported "+(nm[r.reported_id]||"member"),r.reason],tgt&&!tgt.suspended?[["Suspend reported member",function(){return sb.rpc("admin_set_suspended",{uid:tgt.id,flag:true})},"g"]]:[])});
+ var cp=(await sb.from("companion_profiles").select("user_id,featured")).data||[],fm={};cp.forEach(function(x){fm[x.user_id]=x.featured});
+ var U=$("us");U.innerHTML="";
+ users.forEach(function(x){var b=[[x.suspended?"Unsuspend":"Suspend",function(){return sb.rpc("admin_set_suspended",{uid:x.id,flag:!x.suspended})},"g"]];
+  if(x.role==="companion"&&x.id in fm)b.push([fm[x.id]?"Remove featured":"Make featured",function(){return sb.rpc("admin_set_featured",{uid:x.id,flag:!fm[x.id]})},"g"]);
+  card(U,[x.display_name+" · "+x.role+" · ID: "+x.verification_status+(x.suspended?" · SUSPENDED":"")],b)});
+}
+go();
+</script></body></html>

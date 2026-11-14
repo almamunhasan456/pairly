@@ -45,12 +45,12 @@ button:disabled{opacity:.5;cursor:not-allowed}
 </section>
 
 <section id="me" hidden>
-<h2 id="hi"></h2>
+<h2 id="hi"></h2><p id="adm" hidden><a href="admin.html" style="color:#7dd3fc">Open admin panel</a></p>
 <p><span class="pill" id="vs"></span> <span class="pill" id="rolePill"></span></p>
 <form id="pf"><label for="en">Display name</label><input id="en"><label for="ec">City</label><input id="ec"><button>Save changes</button></form>
-<button class="g" disabled title="Identity verification needs a provider; awaiting configuration">ID verification: awaiting configuration</button>
+<div id="idv" hidden><label for="idf">Upload a clear photo of your national ID or passport</label><input id="idf" type="file" accept="image/*"><p class="tiny">Stored privately. Only PAIRLY admins can view it for verification.</p><button class="g" id="idb" type="button">Submit for verification</button></div>
 <div id="cd" hidden>
-<h2>Companion profile</h2>
+<h2>Companion profile</h2><p id="ern"></p>
 <form id="cf"><label for="bio">Short bio</label><textarea id="bio" rows="3" maxlength="400"></textarea>
 <label for="ints">Interests (comma separated)</label><input id="ints" placeholder="coffee, books, travel">
 <label for="langs">Languages (comma separated)</label><input id="langs" placeholder="Bangla, English">
@@ -72,6 +72,8 @@ button:disabled{opacity:.5;cursor:not-allowed}
 <form id="rq" hidden><h2 id="rqt">Request booking</h2><label for="rd">Date</label><input id="rd" type="date" required><label for="rt">Start time</label><input id="rt" type="time" required><label for="rn">Note (optional, no phone numbers)</label><input id="rn" maxlength="200"><button>Send request</button><button class="g" type="button" id="rqx">Cancel</button></form>
 <h2>My bookings</h2><div id="bkl"></div>
 <form id="rvf" hidden><h2>Leave a review</h2><label for="rs">Rating</label><select id="rs"><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select><label for="rc">Comment</label><input id="rc" maxlength="300"><button>Submit review</button></form>
+<form id="pyf" hidden><h2>Pay for booking</h2><p id="pyi"></p><label for="pym">Method</label><select id="pym"><option>bKash</option><option>Nagad</option></select><label for="pyt">Transaction ID</label><input id="pyt" required maxlength="40"><button id="pyb">Submit payment</button></form>
+<form id="dpf" hidden><h2>Open a dispute</h2><label for="dpr">What went wrong?</label><input id="dpr" required maxlength="400"><button>Send to admins</button></form>
 <div id="chat" hidden><h2 id="ct2"></h2><ul class="l" id="msgs"></ul>
 <form id="mf"><input id="mi" maxlength="1000" placeholder="Write a message. Never share phone numbers." required><button>Send</button></form>
 <button class="g sm" type="button" id="rfr">Refresh</button> <button class="g sm" type="button" id="blk">Block this person</button>
@@ -80,7 +82,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 <button class="g" id="out" type="button">Log out</button>
 <div class="msg" id="m2" role="status"></div>
 </section>
-<p class="tiny">Phase 4 · Bookings, chat, reviews, block and report. Payments and admin tools come next.</p>
+<p class="tiny">Phase 5 · Payments, disputes and admin tools.</p>
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
@@ -110,11 +112,11 @@ $("f").onsubmit=async function(e){e.preventDefault();var b=$("go");b.disabled=tr
 async function load(){
  var u=(await sb.auth.getUser()).data.user;
  if(!u){$("auth").hidden=false;$("me").hidden=true;return}
- var r=await sb.from("profiles").select("display_name,city,role,verification_status").eq("id",u.id).single();
+ var r=await sb.from("profiles").select("display_name,city,role,verification_status,suspended").eq("id",u.id).single();
  $("auth").hidden=true;$("me").hidden=false;
  if(r.error){say($("m2"),"Profile not found. Ask support to check your account.");return}
  var p=r.data;$("hi").textContent="Hi, "+p.display_name;$("vs").textContent="ID: "+p.verification_status;$("rolePill").textContent=p.role;
- $("en").value=p.display_name;$("ec").value=p.city||"";uid=u.id;$("cd").hidden=p.role!=="companion";myRole=p.role;if(p.role==="companion")loadCd();loadBr();loadBk();
+ $("en").value=p.display_name;$("ec").value=p.city||"";uid=u.id;if(p.suspended){await sb.auth.signOut();$("auth").hidden=false;$("me").hidden=true;say($("m"),"This account is suspended. Contact support.");return}$("idv").hidden=!(p.verification_status==="unverified"||p.verification_status==="rejected");$("adm").hidden=p.role!=="admin";$("cd").hidden=p.role!=="companion";myRole=p.role;if(p.role==="companion")loadCd();loadBr();loadBk();
 }
 $("pf").onsubmit=async function(e){e.preventDefault();var u=(await sb.auth.getUser()).data.user;
  var r=await sb.from("profiles").update({display_name:$("en").value.trim(),city:$("ec").value.trim()}).eq("id",u.id);
@@ -126,7 +128,7 @@ function csv(s){return s.split(",").map(function(x){return x.trim()}).filter(Boo
 function rm(label,fn){var b=el("button","Remove","g sm");b.type="button";b.onclick=fn;return b}
 async function loadCd(){
  var r=await sb.from("companion_profiles").select("*").eq("user_id",uid).maybeSingle(),c=r.data||{};
- $("bio").value=c.bio||"";$("ints").value=(c.interests||[]).join(", ");$("langs").value=(c.languages||[]).join(", ");$("pub").checked=!!c.is_published;
+ $("bio").value=c.bio||"";$("ints").value=(c.interests||[]).join(", ");$("langs").value=(c.languages||[]).join(", ");$("pub").checked=!!c.is_published;var ep=await sb.from("payments").select("amount_bdt,bookings!inner(companion_id)").eq("status","confirmed").eq("bookings.companion_id",uid);$("ern").textContent="Confirmed earnings: ৳"+(ep.data||[]).reduce(function(a,x){return a+x.amount_bdt},0);
  var pk=await sb.from("packages").select("*").eq("companion_id",uid).order("created_at"),L=$("pkl");L.innerHTML="";
  (pk.data||[]).forEach(function(p){var li=el("li",p.title+" · "+p.duration_hours+"h · ৳"+p.price_bdt);li.appendChild(rm("",async function(){await sb.from("packages").delete().eq("id",p.id);loadCd()}));L.appendChild(li)});
  if(!(pk.data||[]).length)L.appendChild(el("li","No packages yet."));
@@ -135,11 +137,11 @@ async function loadCd(){
  if(!(av.data||[]).length)A.appendChild(el("li","No time slots yet."));
 }
 async function loadBr(){
- var r=await sb.from("companion_profiles").select("user_id,bio,interests,languages,profiles(display_name,city)").eq("is_published",true),B=$("brl"),rows=r.data||[];B.innerHTML="";
+ var r=await sb.from("companion_profiles").select("user_id,bio,interests,languages,featured,profiles(display_name,city)").eq("is_published",true).order("featured",{ascending:false}),B=$("brl"),rows=r.data||[];B.innerHTML="";
  if(!rows.length){B.appendChild(el("p","No verified companions yet."));return}
  var pk=await sb.from("packages").select("*").in("companion_id",rows.map(function(x){return x.user_id})).eq("active",true),rv=await sb.from("reviews").select("companion_id,rating").in("companion_id",rows.map(function(x){return x.user_id}));
  rows.forEach(function(c){var d=el("div",null,"card2"),pr=c.profiles||{};
-  d.appendChild(el("h3",(pr.display_name||"Companion")+(pr.city?" · "+pr.city:"")));d.appendChild(el("p",c.bio||""));
+  d.appendChild(el("h3",(c.featured?"⭐ ":"")+(pr.display_name||"Companion")+(pr.city?" · "+pr.city:"")));d.appendChild(el("p",c.bio||""));
   d.appendChild(el("p",(c.interests||[]).join(", ")+(c.languages&&c.languages.length?" | "+c.languages.join(", "):"")));
   (pk.data||[]).filter(function(p){return p.companion_id===c.user_id}).forEach(function(p){d.appendChild(el("p","• "+p.title+" – "+p.duration_hours+"h – ৳"+p.price_bdt));if(c.user_id!==uid){var q=el("button","Request this package","x sm");q.type="button";q.onclick=function(){reqPk={c:c.user_id,p:p.id};$("rqt").textContent="Request: "+p.title;$("rq").hidden=false;$("rq").scrollIntoView()};d.appendChild(q)}});
   var rr=(rv.data||[]).filter(function(x){return x.companion_id===c.user_id});if(rr.length)d.appendChild(el("p","★ "+(rr.reduce(function(a,x){return a+x.rating},0)/rr.length).toFixed(1)+" ("+rr.length+" reviews)"));B.appendChild(d)});
@@ -154,13 +156,13 @@ $("af").onsubmit=async function(e){e.preventDefault();
  var r=await sb.from("availability").insert({companion_id:uid,day_date:$("ad").value,start_time:$("as").value,end_time:$("ae").value});
  if(r.error)say($("m3"),r.error.message.indexOf("check")>-1?"End time must be after start time.":r.error.message);else{$("af").reset();say($("m3"),"Time slot added.",true);loadCd()}};
 
-var myRole="",curB=null,reqPk=null,curRv=null;
+var PAY_NO="",curPay=null,curDp=null,myRole="",curB=null,reqPk=null,curRv=null;
 async function names(ids){var r=await sb.from("profiles").select("id,display_name").in("id",ids),m={};(r.data||[]).forEach(function(x){m[x.id]=x.display_name});return m}
 async function loadBk(){
  var r=await sb.from("bookings").select("*,packages(title,price_bdt,duration_hours)").order("created_at",{ascending:false}),L=$("bkl"),rows=r.data||[];L.innerHTML="";
  if(!rows.length){L.appendChild(el("p","No bookings yet."));return}
  var ids=[];rows.forEach(function(b){ids.push(b.customer_id,b.companion_id)});var nm=await names(ids);
- var rv=await sb.from("reviews").select("booking_id").eq("reviewer_id",uid),done={};(rv.data||[]).forEach(function(x){done[x.booking_id]=1});
+ var rv=await sb.from("reviews").select("booking_id").eq("reviewer_id",uid),done={};(rv.data||[]).forEach(function(x){done[x.booking_id]=1});var py=await sb.from("payments").select("booking_id,status,amount_bdt").in("booking_id",rows.map(function(b){return b.id})),pay={};(py.data||[]).forEach(function(x){pay[x.booking_id]=x});
  rows.forEach(function(b){var mineC=b.customer_id===uid,other=mineC?b.companion_id:b.customer_id,d=el("div",null,"card2"),pk=b.packages||{};
   d.appendChild(el("h3",(pk.title||"Booking")+" · "+b.status));
   d.appendChild(el("p",(mineC?"With ":"From ")+(nm[other]||"member")+" · "+b.slot_date+" "+b.start_time.slice(0,5)+" · ৳"+(pk.price_bdt||0)));
@@ -171,6 +173,9 @@ async function loadBk(){
   if(mineC&&(b.status==="requested"||b.status==="accepted"))btn("Cancel booking",function(){setSt(b.id,"cancelled")});
   if(b.status!=="declined"&&b.status!=="cancelled")btn("Chat",function(){openChat(b,other,nm[other])});
   if(mineC&&b.status==="completed"&&!done[b.id])btn("Leave review",function(){curRv=b;$("rvf").hidden=false;$("rvf").scrollIntoView()});
+  var pm=pay[b.id];if(pm)d.appendChild(el("p","Payment: "+pm.status+" (৳"+pm.amount_bdt+")"));
+  if(mineC&&b.status==="accepted"&&!pm)btn("Pay now",function(){curPay=b;$("pyi").textContent=PAY_NO?"Send ৳"+(pk.price_bdt||0)+" via bKash or Nagad to "+PAY_NO+", then enter the transaction ID.":"Payment number not configured yet (awaiting configuration).";$("pyb").disabled=!PAY_NO;$("pyf").hidden=false;$("pyf").scrollIntoView()},"x");
+  if(b.status==="accepted"||b.status==="completed")btn("Open dispute",function(){curDp=b;$("dpf").hidden=false;$("dpf").scrollIntoView()});
   L.appendChild(d)});
 }
 async function setSt(id,st){var r=await sb.from("bookings").update({status:st}).eq("id",id);if(r.error)say($("m4"),r.error.message);else{say($("m4"),"Booking "+st+".",true);loadBk()}}
@@ -191,6 +196,15 @@ $("blk").onclick=async function(){var r=await sb.from("blocks").upsert({blocker_
 $("rpt").onclick=async function(){if(!$("rr").value.trim())return say($("m4"),"Describe the problem first.");
  var r=await sb.from("reports").insert({reporter_id:uid,reported_id:curB.other,booking_id:curB.id,reason:$("rr").value.trim()});
  if(r.error)say($("m4"),r.error.message);else{$("rr").value="";say($("m4"),"Report sent to our moderators.",true)}};
+
+$("pyf").onsubmit=async function(e){e.preventDefault();var pk=curPay.packages||{};
+ var r=await sb.from("payments").insert({booking_id:curPay.id,payer_id:uid,amount_bdt:pk.price_bdt,method:$("pym").value,trx_id:$("pyt").value.trim()});
+ if(r.error)say($("m4"),r.error.message);else{$("pyf").reset();$("pyf").hidden=true;say($("m4"),"Payment submitted. An admin will confirm it.",true);loadBk()}};
+$("dpf").onsubmit=async function(e){e.preventDefault();var r=await sb.from("disputes").insert({booking_id:curDp.id,opened_by:uid,reason:$("dpr").value.trim()});
+ if(r.error)say($("m4"),r.error.message);else{$("dpf").reset();$("dpf").hidden=true;say($("m4"),"Dispute opened. Admins will review it.",true)}};
+$("idb").onclick=async function(){var f=$("idf").files[0];if(!f)return say($("m2"),"Choose a photo first.");if(f.size>5e6)return say($("m2"),"File too large (max 5 MB).");
+ var up=await sb.storage.from("id-docs").upload(uid+"/id",f,{upsert:true,contentType:f.type});if(up.error)return say($("m2"),up.error.message);
+ var r=await sb.rpc("request_verification");if(r.error)say($("m2"),r.error.message);else{say($("m2"),"Submitted. An admin will review it.",true);load()}};
 $("out").onclick=async function(){await sb.auth.signOut();load()};
 setMode("in");load();
 </script></body></html>
