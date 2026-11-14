@@ -16,6 +16,7 @@ button.g{background:rgba(255,255,255,.12)}a{color:#7dd3fc}.m{color:var(--mut);fo
 <h2>ID verification requests</h2><div id="vr"></div>
 <h2>Payments to confirm</h2><div id="pm"></div>
 <h2>Disputes</h2><div id="dp"></div>
+<h2>Safety filter flags</h2><div id="fl"></div>
 <h2>Reports</h2><div id="rp"></div>
 <h2>Members</h2><div id="us"></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
@@ -45,10 +46,14 @@ async function go(){
  var rp=(await sb.from("reports").select("*").order("created_at",{ascending:false}).limit(30)).data||[],R=$("rp");R.innerHTML="";if(!rp.length)empty(R,"No reports.");
  rp.forEach(function(r){var tgt=users.filter(function(x){return x.id===r.reported_id})[0];card(R,[(nm[r.reporter_id]||"member")+" reported "+(nm[r.reported_id]||"member"),r.reason],tgt&&!tgt.suspended?[["Suspend reported member",function(){return sb.rpc("admin_set_suspended",{uid:tgt.id,flag:true})},"g"]]:[])});
  var cp=(await sb.from("companion_profiles").select("user_id,featured")).data||[],fm={};cp.forEach(function(x){fm[x.user_id]=x.featured});
+ var fls=(await sb.from("moderation_flags").select("*").order("created_at",{ascending:false}).limit(200)).data||[],F=$("fl"),fc={},rc={};F.innerHTML="";
+ fls.forEach(function(f){fc[f.user_id]=(fc[f.user_id]||0)+1});rp.forEach(function(r){rc[r.reported_id]=(rc[r.reported_id]||0)+1});
+ if(!fls.length)empty(F,"No blocked messages yet.");
+ fls.slice(0,20).forEach(function(f){card(F,[(nm[f.user_id]||"member")+": "+(f.reason||"").replace("MODERATION: ","")+" · "+new Date(f.created_at).toLocaleString()])});
  var U=$("us");U.innerHTML="";
  users.forEach(function(x){var b=[[x.suspended?"Unsuspend":"Suspend",function(){return sb.rpc("admin_set_suspended",{uid:x.id,flag:!x.suspended})},"g"]];
   if(x.role==="companion"&&x.id in fm)b.push([fm[x.id]?"Remove featured":"Make featured",function(){return sb.rpc("admin_set_featured",{uid:x.id,flag:!fm[x.id]})},"g"]);
-  card(U,[x.display_name+" · "+x.role+" · ID: "+x.verification_status+(x.suspended?" · SUSPENDED":"")],b)});
+  var rk=(fc[x.id]||0)+(rc[x.id]||0)*2;card(U,[x.display_name+" · "+x.role+" · ID: "+x.verification_status+(x.suspended?" · SUSPENDED":"")+(rk>=2?" · ⚠ risk "+rk+" ("+(fc[x.id]||0)+" flags, "+(rc[x.id]||0)+" reports)":"")],b)});
 }
 go();
 </script></body></html>

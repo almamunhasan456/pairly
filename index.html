@@ -21,7 +21,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .msg{margin-top:12px;font-size:14px;min-height:20px}.err{color:#fda4af}.ok{color:#86efac}
 .pill{display:inline-block;padding:3px 10px;border-radius:99px;background:rgba(56,189,248,.18);color:#7dd3fc;font-size:12px}
 .tiny{font-size:12px;color:var(--mut);margin-top:14px}
-.sm{width:auto;margin:6px 0 0;padding:6px 12px;font-size:13px}ul.l{padding:0;list-style:none;margin:8px 0}ul.l li{padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}.card2{border:1px solid var(--line);border-radius:14px;padding:12px;margin:10px 0}.card2 h3{margin:0 0 6px;font:700 17px Sora,sans-serif}.card2 p{margin:0 0 6px}textarea{width:100%;background:rgba(255,255,255,.09);border:1px solid var(--line);border-radius:12px;padding:12px;color:var(--tx);font:inherit}.chk{display:flex;gap:8px;align-items:center}.chk input{width:auto}[hidden]{display:none!important}
+.bar{height:6px;border-radius:9px;background:rgba(255,255,255,.1);overflow:hidden;margin:6px 0}.sm{width:auto;margin:6px 0 0;padding:6px 12px;font-size:13px}ul.l{padding:0;list-style:none;margin:8px 0}ul.l li{padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}.card2{border:1px solid var(--line);border-radius:14px;padding:12px;margin:10px 0}.card2 h3{margin:0 0 6px;font:700 17px Sora,sans-serif}.card2 p{margin:0 0 6px}textarea{width:100%;background:rgba(255,255,255,.09);border:1px solid var(--line);border-radius:12px;padding:12px;color:var(--tx);font:inherit}.chk{display:flex;gap:8px;align-items:center}.chk input{width:auto}[hidden]{display:none!important}
 :focus-visible{outline:2px solid #38bdf8;outline-offset:3px}
 </style></head><body>
 <main class="box">
@@ -47,11 +47,11 @@ button:disabled{opacity:.5;cursor:not-allowed}
 <section id="me" hidden>
 <h2 id="hi"></h2><p id="adm" hidden><a href="admin.html" style="color:#7dd3fc">Open admin panel</a></p>
 <p><span class="pill" id="vs"></span> <span class="pill" id="rolePill"></span></p>
-<form id="pf"><label for="en">Display name</label><input id="en"><label for="ec">City</label><input id="ec"><button>Save changes</button></form>
+<form id="pf"><label for="en">Display name</label><input id="en"><label for="ec">City</label><input id="ec"><label for="ei">My interests (comma separated, used for matching)</label><input id="ei" placeholder="coffee, books, travel"><button>Save changes</button></form>
 <div id="idv" hidden><label for="idf">Upload a clear photo of your national ID or passport</label><input id="idf" type="file" accept="image/*"><p class="tiny">Stored privately. Only PAIRLY admins can view it for verification.</p><button class="g" id="idb" type="button">Submit for verification</button></div>
 <div id="cd" hidden>
 <h2>Companion profile</h2><p id="ern"></p>
-<form id="cf"><label for="bio">Short bio</label><textarea id="bio" rows="3" maxlength="400"></textarea>
+<form id="cf"><label for="bio">Short bio</label><textarea id="bio" rows="3" maxlength="400"></textarea><button class="g sm" type="button" id="bg">Suggest a bio (template)</button>
 <label for="ints">Interests (comma separated)</label><input id="ints" placeholder="coffee, books, travel">
 <label for="langs">Languages (comma separated)</label><input id="langs" placeholder="Bangla, English">
 <label class="chk"><input type="checkbox" id="pub">Publish my profile (shown to others only after ID verification)</label>
@@ -82,7 +82,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 <button class="g" id="out" type="button">Log out</button>
 <div class="msg" id="m2" role="status"></div>
 </section>
-<p class="tiny">Phase 5 · Payments, disputes and admin tools.</p>
+<p class="tiny">Phase 6 · Smart matching, safety filters and reputation levels. Matching is rule-based today; LLM-powered AI is awaiting configuration (needs an API key and a secure server).</p>
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
@@ -112,15 +112,15 @@ $("f").onsubmit=async function(e){e.preventDefault();var b=$("go");b.disabled=tr
 async function load(){
  var u=(await sb.auth.getUser()).data.user;
  if(!u){$("auth").hidden=false;$("me").hidden=true;return}
- var r=await sb.from("profiles").select("display_name,city,role,verification_status,suspended").eq("id",u.id).single();
+ var r=await sb.from("profiles").select("display_name,city,role,verification_status,suspended,interests").eq("id",u.id).single();
  $("auth").hidden=true;$("me").hidden=false;
  if(r.error){say($("m2"),"Profile not found. Ask support to check your account.");return}
  var p=r.data;$("hi").textContent="Hi, "+p.display_name;$("vs").textContent="ID: "+p.verification_status;$("rolePill").textContent=p.role;
- $("en").value=p.display_name;$("ec").value=p.city||"";uid=u.id;if(p.suspended){await sb.auth.signOut();$("auth").hidden=false;$("me").hidden=true;say($("m"),"This account is suspended. Contact support.");return}$("idv").hidden=!(p.verification_status==="unverified"||p.verification_status==="rejected");$("adm").hidden=p.role!=="admin";$("cd").hidden=p.role!=="companion";myRole=p.role;if(p.role==="companion")loadCd();loadBr();loadBk();
+ $("en").value=p.display_name;$("ec").value=p.city||"";$("ei").value=(p.interests||[]).join(", ");myInts=(p.interests||[]).map(function(x){return x.toLowerCase()});myCity=p.city||"";uid=u.id;if(p.suspended){await sb.auth.signOut();$("auth").hidden=false;$("me").hidden=true;say($("m"),"This account is suspended. Contact support.");return}$("idv").hidden=!(p.verification_status==="unverified"||p.verification_status==="rejected");$("adm").hidden=p.role!=="admin";$("cd").hidden=p.role!=="companion";myRole=p.role;if(p.role==="companion")loadCd();loadBr();loadBk();
 }
 $("pf").onsubmit=async function(e){e.preventDefault();var u=(await sb.auth.getUser()).data.user;
- var r=await sb.from("profiles").update({display_name:$("en").value.trim(),city:$("ec").value.trim()}).eq("id",u.id);
- if(r.error)say($("m2"),r.error.message);else{say($("m2"),"Saved.",true);$("hi").textContent="Hi, "+$("en").value.trim()}};
+ var r=await sb.from("profiles").update({display_name:$("en").value.trim(),city:$("ec").value.trim(),interests:csv($("ei").value)}).eq("id",u.id);
+ if(r.error)say($("m2"),r.error.message);else{myInts=csv($("ei").value).map(function(x){return x.toLowerCase()});myCity=$("ec").value.trim();loadBr();say($("m2"),"Saved.",true);$("hi").textContent="Hi, "+$("en").value.trim()}};
 
 var uid=null;
 function el(t,x,c){var e=document.createElement(t);if(x!=null)e.textContent=x;if(c)e.className=c;return e}
@@ -140,11 +140,21 @@ async function loadBr(){
  var r=await sb.from("companion_profiles").select("user_id,bio,interests,languages,featured,profiles(display_name,city)").eq("is_published",true).order("featured",{ascending:false}),B=$("brl"),rows=r.data||[];B.innerHTML="";
  if(!rows.length){B.appendChild(el("p","No verified companions yet."));return}
  var pk=await sb.from("packages").select("*").in("companion_id",rows.map(function(x){return x.user_id})).eq("active",true),rv=await sb.from("reviews").select("companion_id,rating").in("companion_id",rows.map(function(x){return x.user_id}));
+ var rp=await sb.rpc("public_reputation"),RP={};(rp.data||[]).forEach(function(x){RP[x.companion_id]=x});
+ function sc(c){var sh=(c.interests||[]).filter(function(i){return myInts.indexOf(i.toLowerCase())>-1}),pr=c.profiles||{};return{sh:sh,n:Math.min(98,45+sh.length*15+(myCity&&pr.city&&pr.city.toLowerCase()===myCity.toLowerCase()?10:0))}}
+ rows.forEach(function(c){c.m=sc(c)});rows.sort(function(a,b){return b.m.n-a.m.n});
  rows.forEach(function(c){var d=el("div",null,"card2"),pr=c.profiles||{};
   d.appendChild(el("h3",(c.featured?"⭐ ":"")+(pr.display_name||"Companion")+(pr.city?" · "+pr.city:"")));d.appendChild(el("p",c.bio||""));
   d.appendChild(el("p",(c.interests||[]).join(", ")+(c.languages&&c.languages.length?" | "+c.languages.join(", "):"")));
   (pk.data||[]).filter(function(p){return p.companion_id===c.user_id}).forEach(function(p){d.appendChild(el("p","• "+p.title+" – "+p.duration_hours+"h – ৳"+p.price_bdt));if(c.user_id!==uid){var q=el("button","Request this package","x sm");q.type="button";q.onclick=function(){reqPk={c:c.user_id,p:p.id};$("rqt").textContent="Request: "+p.title;$("rq").hidden=false;$("rq").scrollIntoView()};d.appendChild(q)}});
-  var rr=(rv.data||[]).filter(function(x){return x.companion_id===c.user_id});if(rr.length)d.appendChild(el("p","★ "+(rr.reduce(function(a,x){return a+x.rating},0)/rr.length).toFixed(1)+" ("+rr.length+" reviews)"));B.appendChild(d)});
+  var rr=(rv.data||[]).filter(function(x){return x.companion_id===c.user_id});if(rr.length)d.appendChild(el("p","★ "+(rr.reduce(function(a,x){return a+x.rating},0)/rr.length).toFixed(1)+" ("+rr.length+" reviews)"));var m=c.m;
+  d.appendChild(el("p","Level: "+badge(RP[c.user_id])));
+  d.appendChild(el("p","Match "+m.n+"%"+(m.sh.length?" · shared: "+m.sh.join(", "):"")));
+  var bar=el("div",null,"bar"),fill=el("i");fill.style.cssText="display:block;height:100%;width:0;transition:width 1s ease;background:linear-gradient(110deg,#8b5cf6,#ec4899 55%,#38bdf8)";bar.appendChild(fill);d.appendChild(bar);
+  requestAnimationFrame(function(){requestAnimationFrame(function(){fill.style.width=m.n+"%"})});
+  d.appendChild(el("p","Idea: "+idea(m.sh[0]||(c.interests||[])[0]),"tiny"));
+  if(B.children.length===0&&rows.length>1)d.insertBefore(el("p","Top match for you"),d.firstChild);
+  B.appendChild(d)});
 }
 $("cf").onsubmit=async function(e){e.preventDefault();
  var r=await sb.from("companion_profiles").upsert({user_id:uid,bio:$("bio").value.trim(),interests:csv($("ints").value),languages:csv($("langs").value),is_published:$("pub").checked,updated_at:new Date().toISOString()});
@@ -156,7 +166,7 @@ $("af").onsubmit=async function(e){e.preventDefault();
  var r=await sb.from("availability").insert({companion_id:uid,day_date:$("ad").value,start_time:$("as").value,end_time:$("ae").value});
  if(r.error)say($("m3"),r.error.message.indexOf("check")>-1?"End time must be after start time.":r.error.message);else{$("af").reset();say($("m3"),"Time slot added.",true);loadCd()}};
 
-var PAY_NO="",curPay=null,curDp=null,myRole="",curB=null,reqPk=null,curRv=null;
+var PAY_NO="bKash 01974641238 or Nagad 01846808636",curPay=null,curDp=null,myRole="",curB=null,reqPk=null,curRv=null;
 async function names(ids){var r=await sb.from("profiles").select("id,display_name").in("id",ids),m={};(r.data||[]).forEach(function(x){m[x.id]=x.display_name});return m}
 async function loadBk(){
  var r=await sb.from("bookings").select("*,packages(title,price_bdt,duration_hours)").order("created_at",{ascending:false}),L=$("bkl"),rows=r.data||[];L.innerHTML="";
@@ -174,7 +184,7 @@ async function loadBk(){
   if(b.status!=="declined"&&b.status!=="cancelled")btn("Chat",function(){openChat(b,other,nm[other])});
   if(mineC&&b.status==="completed"&&!done[b.id])btn("Leave review",function(){curRv=b;$("rvf").hidden=false;$("rvf").scrollIntoView()});
   var pm=pay[b.id];if(pm)d.appendChild(el("p","Payment: "+pm.status+" (৳"+pm.amount_bdt+")"));
-  if(mineC&&b.status==="accepted"&&!pm)btn("Pay now",function(){curPay=b;$("pyi").textContent=PAY_NO?"Send ৳"+(pk.price_bdt||0)+" via bKash or Nagad to "+PAY_NO+", then enter the transaction ID.":"Payment number not configured yet (awaiting configuration).";$("pyb").disabled=!PAY_NO;$("pyf").hidden=false;$("pyf").scrollIntoView()},"x");
+  if(mineC&&b.status==="accepted"&&!pm)btn("Pay now",function(){curPay=b;$("pyi").textContent=PAY_NO?"Send ৳"+(pk.price_bdt||0)+" using Send Money to "+PAY_NO+". Then pick the method you used and enter the transaction ID.":"Payment number not configured yet (awaiting configuration).";$("pyb").disabled=!PAY_NO;$("pyf").hidden=false;$("pyf").scrollIntoView()},"x");
   if(b.status==="accepted"||b.status==="completed")btn("Open dispute",function(){curDp=b;$("dpf").hidden=false;$("dpf").scrollIntoView()});
   L.appendChild(d)});
 }
@@ -190,7 +200,7 @@ function openChat(b,other,name){curB={id:b.id,other:other};$("chat").hidden=fals
 async function loadMsgs(){var r=await sb.from("messages").select("*").eq("booking_id",curB.id).order("created_at"),L=$("msgs");L.innerHTML="";
  (r.data||[]).forEach(function(m){L.appendChild(el("li",(m.sender_id===uid?"Me: ":"Them: ")+m.body))});if(!(r.data||[]).length)L.appendChild(el("li","No messages yet."))}
 $("mf").onsubmit=async function(e){e.preventDefault();var r=await sb.from("messages").insert({booking_id:curB.id,sender_id:uid,body:$("mi").value.trim()});
- if(r.error)say($("m4"),r.error.message);else{$("mi").value="";loadMsgs()}};
+ if(r.error){say($("m4"),r.error.message.replace("MODERATION: ",""));if(r.error.message.indexOf("MODERATION")>-1)sb.rpc("log_flag",{bid:curB.id,why:r.error.message})}else{$("mi").value="";loadMsgs()}};
 $("rfr").onclick=function(){loadMsgs()};
 $("blk").onclick=async function(){var r=await sb.from("blocks").upsert({blocker_id:uid,blocked_id:curB.other});say($("m4"),r.error?r.error.message:"Blocked. They can no longer message you.",!r.error)};
 $("rpt").onclick=async function(){if(!$("rr").value.trim())return say($("m4"),"Describe the problem first.");
@@ -205,6 +215,13 @@ $("dpf").onsubmit=async function(e){e.preventDefault();var r=await sb.from("disp
 $("idb").onclick=async function(){var f=$("idf").files[0];if(!f)return say($("m2"),"Choose a photo first.");if(f.size>5e6)return say($("m2"),"File too large (max 5 MB).");
  var up=await sb.storage.from("id-docs").upload(uid+"/id",f,{upsert:true,contentType:f.type});if(up.error)return say($("m2"),up.error.message);
  var r=await sb.rpc("request_verification");if(r.error)say($("m2"),r.error.message);else{say($("m2"),"Submitted. An admin will review it.",true);load()}};
+
+var myInts=[],myCity="";
+function badge(r){if(!r||!r.completed)return"New";var a=+r.avg_rating||0,c=+r.completed;return c>=20&&a>=4.5?"🥇 Gold":c>=5&&a>=4?"🥈 Silver":"🥉 Bronze"}
+var IDEAS={coffee:"Try a café crawl",books:"Visit a bookshop and swap picks",travel:"Plan a half-day city walk",food:"Street food tasting tour",art:"Gallery or exhibition visit",music:"Live music or record shop",photography:"Photo walk",hiking:"Easy nature walk",shopping:"A relaxed shopping day",cricket:"Watch a match together",nature:"Park or riverside walk"};
+function idea(i){return IDEAS[(i||"").toLowerCase()]||"Start with a 2-hour coffee meetup"}
+$("bg").onclick=function(){var n=$("en").value.trim()||"a PAIRLY companion",c=$("ec").value.trim(),i=csv($("ints").value),l=csv($("langs").value);
+ $("bio").value=("Hi, I'm "+n+(c?" from "+c:"")+". "+(i.length?"I enjoy "+i.join(", ")+". ":"")+(l.length?"I speak "+l.join(" and ")+". ":"")+"Happy to meet in public places for friendly, relaxed activities.").slice(0,400)};
 $("out").onclick=async function(){await sb.auth.signOut();load()};
 setMode("in");load();
 </script></body></html>
